@@ -2,6 +2,7 @@
 
 import requests
 import json
+import csv
 import pandas as pd
 from datetime import datetime as dt
 from dateutil import parser
@@ -11,6 +12,7 @@ import logging
 import os
 import sys
 import pdb
+import re
 
 # Show all columns when printing a pandas DataFrame
 pd.options.display.max_columns = None
@@ -74,18 +76,33 @@ def main():
     headers = {'Authorization': 'Bearer '+token, 'Content-Type': 'application/json'}
 
     # Get data from the last 24hrs
-    min_date, max_date = last_n_hrs(1)
+    min_date, max_date = last_n_hrs(24)
 
     # The query on lucene syntaxis
-    query = "data.Type:analysis AND  data.Status:Completed AND  data.ExitCode:0 AND data.CMSSite:T2_US_Caltech AND data.InputData:Offsite"
+    query = "data.Type:analysis AND data.Status:Completed AND data.ExitCode:0 AND data.CMSSite:T2_US_Caltech AND data.InputData:Offsite"
 
     # Read the list of fields to retrieve from a file
-    fields= ['data.DESIRED_CMSDataLocations', 'data.CpuEff', 'data.CMSPrimaryProcessedDataset', 'data.ResidentSetSize']
+    #fields= ['data.DESIRED_CMSDataLocations', 'data.CpuEff', 'data.CMSPrimaryProcessedDataset', 'data.BytesRecvd', 'data.ChirpCMSSWReadBytes']
+    fields= [ 'data.BytesRecvd', 'data.CpuEff', 'data.CRAB_DataBlock']
 
     fields_no_data = remove_dot_data(fields)
 
+    cache_regs=[
+      "RunIISummer19UL16.*\/MINIAODSIM#",
+      "RunIISummer19UL17.*\/MINIAODSIM#",
+      "RunIISummer19UL18.*\/MINIAODSIM#",
+      "RunIISummer20UL16.*\/MINIAODSIM#",
+      "RunIISummer20UL17.*\/MINIAODSIM#",
+      "RunIISummer20UL18.*\/MINIAODSIM#",
+      "Run2016.*UL2016.*\/MINIAOD#",
+      "Run2017.*UL2017.*\/MINIAOD#",
+      "Run2018.*UL2018.*\/MINIAOD#"
+    ]
+
+    cache_regs_combined = '(?:% s)' % '|'.join(cache_regs)
+
     # Number of records to retreive
-    num_records = 100
+    num_records = 10000
 
     log.debug("Query: "+query)
 
@@ -121,6 +138,30 @@ def main():
     print(json_formatted_str)
 
 
+    data_file = open('data_file.csv', 'w')
+    csv_writer = csv.writer(data_file,delimiter=';')
+    
+    print (cache_regs_combined)
+
+    count = 0
+ 
+    for hit in d['hits']['hits']:
+      if count == 0:
+ 
+        # Writing headers of CSV file
+        header = hit['_source']['data'].keys()
+        csv_writer.writerow(header)
+        count += 1
+
+      # Writing data of CSV file
+      print (hit['_source']['data']['CRAB_DataBlock'])
+      if re.match(cache_regs_combined, hit['_source']['data']['CRAB_DataBlock']):
+          hit['_source']['data']['match']=1
+      else:
+          hit['_source']['data']['match']=0
+      csv_writer.writerow(hit['_source']['data'].values())
+
+      #print (x['_source']['data'])
 
     #pdb.set_trace()
 
